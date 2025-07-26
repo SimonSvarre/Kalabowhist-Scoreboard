@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kalabowhist Pointtæller</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -77,12 +79,18 @@
         </tr>
       </tfoot>
     </table>
+
+    <br>
+    <button onclick="downloadExcel()">Download som Excel</button>
+    <button onclick="showGraph()">Vis pointgraf</button>
+    <canvas id="pointChart" style="max-height:400px; margin-top:20px;"></canvas>
   </div>
 
   <script>
     let playerCount = 4;
     let playerNames = [];
     let rounds = [];
+    let pointChart = null;
 
     function generateNameInputs() {
       playerCount = parseInt(document.getElementById("playerCount").value);
@@ -102,6 +110,7 @@
     }
 
     function startGame() {
+      playerNames = []; // nulstil ved start
       for (let i = 0; i < playerCount; i++) {
         const name = document.getElementById(`name${i}`).value.trim();
         playerNames.push(name || `Spiller ${i + 1}`);
@@ -138,6 +147,8 @@
       headerRow.innerHTML += `<th>Sum af gæt</th>`;
       footerRow.innerHTML += `<td>-</td>`;
 
+      gameBody.innerHTML = ""; // ryd evt gammel tabel
+
       rounds.forEach((cards, rIndex) => {
         const row = document.createElement("tr");
         const starterIndex = rIndex % playerCount;
@@ -145,8 +156,8 @@
         playerNames.forEach((name, pIndex) => {
           const starterClass = pIndex === starterIndex ? 'starter' : '';
           row.innerHTML += `<td class="${starterClass}">
-            Gæt: <input type="number" min="0" max="${cards}" id="guess-${rIndex}-${pIndex}" onchange="calculatePoints(${rIndex})"><br>
-            Stik: <input type="number" min="0" max="${cards}" id="got-${rIndex}-${pIndex}" onchange="calculatePoints(${rIndex})"><br>
+            Gæt: <input type="number" min="0" max="${cards}" id="guess-${rIndex}-${pIndex}" onchange="calculatePoints()"><br>
+            Stik: <input type="number" min="0" max="${cards}" id="got-${rIndex}-${pIndex}" onchange="calculatePoints()"><br>
             <strong id="points-${rIndex}-${pIndex}">0</strong>
           </td>`;
         });
@@ -155,23 +166,30 @@
       });
     }
 
-    function calculatePoints(rIndex) {
-      let totals = new Array(playerCount).fill(0);
-      let sum = 0;
-      for (let p = 0; p < playerCount; p++) {
-        const guessEl = document.getElementById(`guess-${rIndex}-${p}`);
-        const gotEl = document.getElementById(`got-${rIndex}-${p}`);
-        const guess = parseInt(guessEl.value);
-        const got = parseInt(gotEl.value);
-        let point = 0;
-        if (!isNaN(guess) && !isNaN(got)) {
-          point = (guess === got) ? 10 + got : -5 * Math.abs(got - guess);
-          sum += guess;
+    function calculatePoints() {
+      // Beregn point og sum af gæt for hver runde
+      for (let r = 0; r < rounds.length; r++) {
+        let sumGuesses = 0;
+        for (let p = 0; p < playerCount; p++) {
+          const guessEl = document.getElementById(`guess-${r}-${p}`);
+          const gotEl = document.getElementById(`got-${r}-${p}`);
+          const pointsEl = document.getElementById(`points-${r}-${p}`);
+          
+          const guess = parseInt(guessEl.value);
+          const got = parseInt(gotEl.value);
+          let point = 0;
+          if (!isNaN(guess) && !isNaN(got)) {
+            point = (guess === got) ? 10 + got : -5 * Math.abs(got - guess);
+            sumGuesses += guess;
+          }
+          pointsEl.textContent = point;
         }
-        document.getElementById(`points-${rIndex}-${p}`).textContent = point;
+        // Opdater sum af gæt for runden
+        const sumEl = document.getElementById(`sum-${r}`);
+        if (sumEl) sumEl.textContent = sumGuesses;
       }
-      document.getElementById(`sum-${rIndex}`).textContent = sum;
 
+      // Beregn total point for hver spiller
       for (let p = 0; p < playerCount; p++) {
         let total = 0;
         for (let r = 0; r < rounds.length; r++) {
@@ -180,6 +198,67 @@
         }
         document.getElementById(`total-${playerNames[p]}`).textContent = total;
       }
+    }
+
+    function downloadExcel() {
+      const wb = XLSX.utils.book_new();
+      const ws_data = [
+        ["Runde", ...playerNames, "Sum af gæt"]
+      ];
+
+      for (let r = 0; r < rounds.length; r++) {
+        const row = [`${rounds[r]} kort`];
+        for (let p = 0; p < playerCount; p++) {
+          row.push(document.getElementById(`points-${r}-${p}`).textContent);
+        }
+        row.push(document.getElementById(`sum-${r}`).textContent);
+        ws_data.push(row);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "Pointoversigt");
+      XLSX.writeFile(wb, "kalabowhist.xlsx");
+    }
+
+    function showGraph() {
+      const ctx = document.getElementById('pointChart').getContext('2d');
+
+      // Hvis der allerede findes et Chart, så ødelæg det først
+      if (pointChart) {
+        pointChart.destroy();
+      }
+
+      const datasets = playerNames.map((name, pIndex) => {
+        let data = [];
+        let sum = 0;
+        for (let r = 0; r < rounds.length; r++) {
+          const pt = parseInt(document.getElementById(`points-${r}-${pIndex}`).textContent);
+          if (!isNaN(pt)) sum += pt;
+          data.push(sum);
+        }
+        return {
+          label: name,
+          data: data,
+          fill: false,
+          borderColor: `hsl(${pIndex * 60}, 70%, 50%)`,
+          tension: 0.1
+        };
+      });
+
+      pointChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: rounds.map(c => `${c} kort`),
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom' },
+            title: { display: true, text: 'Pointudvikling gennem spillet' }
+          }
+        }
+      });
     }
   </script>
 </body>
