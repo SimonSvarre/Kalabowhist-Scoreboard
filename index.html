@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kalabowhist Pointtæller</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 2rem;
+      background: #f4f4f4;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      text-align: center;
+      padding: 0.5rem;
+    }
+    input[type="number"], input[type="text"] {
+      width: 60px;
+    }
+    .starter {
+      background-color: #ffeb3b;
+    }
+    #setup, #game {
+      margin-bottom: 2rem;
+    }
+    .round-header {
+      background: #ddd;
+      font-weight: bold;
+    }
+    .sum-cell {
+      font-weight: bold;
+      background: #eee;
+    }
+  </style>
+</head>
+<body>
+  <h1>Kalabowhist Pointtæller</h1>
+
+  <div id="setup">
+    <h2>Opsætning</h2>
+    <label>Antal spillere (2-6): <input type="number" id="playerCount" min="2" max="6" value="4"></label><br><br>
+    <div id="nameInputs"></div>
+    <button onclick="generateNameInputs()">Næste</button>
+    <div id="cardInput" style="display:none;">
+      <br><label>Startkort per spiller: <input type="number" id="startCards" min="1"></label><br><br>
+      <button onclick="startGame()">Start spil</button>
+    </div>
+  </div>
+
+  <div id="game" style="display:none;">
+    <h2>Spiloversigt</h2>
+    <table id="gameTable">
+      <thead>
+        <tr id="headerRow">
+          <th>Runde</th>
+          <!-- spillernavne -->
+          <th>Sum af gæt</th>
+        </tr>
+      </thead>
+      <tbody id="gameBody">
+        <!-- runder -->
+      </tbody>
+      <tfoot>
+        <tr>
+          <th>Total</th>
+          <!-- total point -->
+          <th>-</th>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <script>
+    let playerCount = 4;
+    let playerNames = [];
+    let rounds = [];
+
+    function generateNameInputs() {
+      playerCount = parseInt(document.getElementById("playerCount").value);
+      if (playerCount < 2 || playerCount > 6) {
+        alert("Vælg mellem 2 og 6 spillere.");
+        return;
+      }
+      const nameDiv = document.getElementById("nameInputs");
+      nameDiv.innerHTML = "";
+      for (let i = 0; i < playerCount; i++) {
+        nameDiv.innerHTML += `<label>Spiller ${i + 1} navn: <input type="text" id="name${i}" required></label><br>`;
+      }
+      document.getElementById("cardInput").style.display = "block";
+      const maxCards = Math.floor(52 / playerCount);
+      document.getElementById("startCards").value = maxCards;
+      document.getElementById("startCards").max = maxCards;
+    }
+
+    function startGame() {
+      for (let i = 0; i < playerCount; i++) {
+        const name = document.getElementById(`name${i}`).value.trim();
+        playerNames.push(name || `Spiller ${i + 1}`);
+      }
+      const startCards = parseInt(document.getElementById("startCards").value);
+      if (isNaN(startCards) || startCards < 1) {
+        alert("Indtast gyldigt antal kort.");
+        return;
+      }
+      generateRounds(startCards);
+      renderTable();
+      document.getElementById("setup").style.display = "none";
+      document.getElementById("game").style.display = "block";
+    }
+
+    function generateRounds(startCards) {
+      rounds = [];
+      for (let i = startCards; i >= 1; i--) rounds.push(i);
+      for (let i = 0; i < playerCount; i++) rounds.push(1);
+      for (let i = 2; i <= startCards; i++) rounds.push(i);
+    }
+
+    function renderTable() {
+      const headerRow = document.getElementById("headerRow");
+      const gameBody = document.getElementById("gameBody");
+      const footerRow = document.querySelector("tfoot tr");
+      headerRow.innerHTML = "<th>Runde</th>";
+      footerRow.innerHTML = "<th>Total</th>";
+
+      playerNames.forEach(name => {
+        headerRow.innerHTML += `<th>${name}</th>`;
+        footerRow.innerHTML += `<td id="total-${name}">0</td>`;
+      });
+      headerRow.innerHTML += `<th>Sum af gæt</th>`;
+      footerRow.innerHTML += `<td>-</td>`;
+
+      rounds.forEach((cards, rIndex) => {
+        const row = document.createElement("tr");
+        const starterIndex = rIndex % playerCount;
+        row.innerHTML = `<td class="round-header">${cards} kort</td>`;
+        playerNames.forEach((name, pIndex) => {
+          const starterClass = pIndex === starterIndex ? 'starter' : '';
+          row.innerHTML += `<td class="${starterClass}">
+            Gæt: <input type="number" min="0" max="${cards}" id="guess-${rIndex}-${pIndex}" onchange="calculatePoints(${rIndex})"><br>
+            Stik: <input type="number" min="0" max="${cards}" id="got-${rIndex}-${pIndex}" onchange="calculatePoints(${rIndex})"><br>
+            <strong id="points-${rIndex}-${pIndex}">0</strong>
+          </td>`;
+        });
+        row.innerHTML += `<td class="sum-cell" id="sum-${rIndex}">0</td>`;
+        gameBody.appendChild(row);
+      });
+    }
+
+    function calculatePoints(rIndex) {
+      let totals = new Array(playerCount).fill(0);
+      let sum = 0;
+      for (let p = 0; p < playerCount; p++) {
+        const guessEl = document.getElementById(`guess-${rIndex}-${p}`);
+        const gotEl = document.getElementById(`got-${rIndex}-${p}`);
+        const guess = parseInt(guessEl.value);
+        const got = parseInt(gotEl.value);
+        let point = 0;
+        if (!isNaN(guess) && !isNaN(got)) {
+          point = (guess === got) ? 10 + got : -5 * Math.abs(got - guess);
+          sum += guess;
+        }
+        document.getElementById(`points-${rIndex}-${p}`).textContent = point;
+      }
+      document.getElementById(`sum-${rIndex}`).textContent = sum;
+
+      for (let p = 0; p < playerCount; p++) {
+        let total = 0;
+        for (let r = 0; r < rounds.length; r++) {
+          const pt = parseInt(document.getElementById(`points-${r}-${p}`).textContent);
+          if (!isNaN(pt)) total += pt;
+        }
+        document.getElementById(`total-${playerNames[p]}`).textContent = total;
+      }
+    }
+  </script>
+</body>
+</html>
