@@ -49,7 +49,7 @@
 
   <div id="setup">
     <h2>Opsætning</h2>
-    <label>Antal spillere (2-6): <input type="number" id="playerCount" min="2" max="6" value="4"></label><br><br>
+    <label>Antal spillere: <input type="number" id="playerCount" min="2" max="10" value="4"></label><br><br>
     <div id="nameInputs"></div>
     <button onclick="generateNameInputs()">Næste</button>
     <div id="cardInput" style="display:none;">
@@ -91,8 +91,8 @@
 
     function generateNameInputs() {
       playerCount = parseInt(document.getElementById("playerCount").value);
-      if (playerCount < 2 || playerCount > 6) {
-        alert("Vælg mellem 2 og 6 spillere.");
+      if (playerCount < 2 || playerCount > 10) {
+        alert("Vælg mellem 2 og 10 spillere.");
         return;
       }
       const nameDiv = document.getElementById("nameInputs");
