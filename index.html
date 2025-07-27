@@ -68,13 +68,10 @@
           <th>Sum af gæt</th>
         </tr>
       </thead>
-      <tbody id="gameBody">
-        <!-- runder -->
-      </tbody>
+      <tbody id="gameBody"></tbody>
       <tfoot>
         <tr>
           <th>Total</th>
-          <!-- total point -->
           <th>-</th>
         </tr>
       </tfoot>
@@ -110,7 +107,7 @@
     }
 
     function startGame() {
-      playerNames = []; // nulstil ved start
+      playerNames = [];
       for (let i = 0; i < playerCount; i++) {
         const name = document.getElementById(`name${i}`).value.trim();
         playerNames.push(name || `Spiller ${i + 1}`);
@@ -147,7 +144,7 @@
       headerRow.innerHTML += `<th>Sum af gæt</th>`;
       footerRow.innerHTML += `<td>-</td>`;
 
-      gameBody.innerHTML = ""; // ryd evt gammel tabel
+      gameBody.innerHTML = "";
 
       rounds.forEach((cards, rIndex) => {
         const row = document.createElement("tr");
@@ -156,7 +153,7 @@
         playerNames.forEach((name, pIndex) => {
           const starterClass = pIndex === starterIndex ? 'starter' : '';
           row.innerHTML += `<td class="${starterClass}">
-            Gæt: <input type="number" min="0" max="${cards}" id="guess-${rIndex}-${pIndex}" onchange="calculatePoints()"><br>
+            Gæt: <input type="number" min="0" max="${cards}" id="guess-${rIndex}-${pIndex}" onchange="updateSum(${rIndex}, ${pIndex})"><br>
             Stik: <input type="number" min="0" max="${cards}" id="got-${rIndex}-${pIndex}" onchange="calculatePoints()"><br>
             <strong id="points-${rIndex}-${pIndex}">0</strong>
           </td>`;
@@ -166,30 +163,48 @@
       });
     }
 
+    function updateSum(rIndex, lastChangedPlayerIndex) {
+      let sumGuesses = 0;
+      let allGuesses = [];
+      for (let p = 0; p < playerCount; p++) {
+        const guessEl = document.getElementById(`guess-${rIndex}-${p}`);
+        const guess = parseInt(guessEl.value);
+        allGuesses[p] = isNaN(guess) ? null : guess;
+        if (!isNaN(guess)) sumGuesses += guess;
+      }
+      document.getElementById(`sum-${rIndex}`).textContent = sumGuesses;
+
+      // Tjek for ulovligt gæt (sidste spiller må ikke ramme total)
+      const starterIndex = rIndex % playerCount;
+      const lastPlayerIndex = (starterIndex + playerCount - 1) % playerCount;
+      const allButLastEntered = allGuesses.filter((g, i) => i !== lastPlayerIndex && g !== null).length === playerCount - 1;
+      const lastPlayerGuess = allGuesses[lastPlayerIndex];
+
+      if (lastChangedPlayerIndex === lastPlayerIndex && allButLastEntered && lastPlayerGuess !== null) {
+        if (sumGuesses === rounds[rIndex]) {
+          alert(`Ugyldigt gæt! ${playerNames[lastPlayerIndex]} må ikke gøre summen af gæt lig med antal kort (${rounds[rIndex]}).`);
+        }
+      }
+
+      calculatePoints();
+    }
+
     function calculatePoints() {
-      // Beregn point og sum af gæt for hver runde
       for (let r = 0; r < rounds.length; r++) {
-        let sumGuesses = 0;
         for (let p = 0; p < playerCount; p++) {
           const guessEl = document.getElementById(`guess-${r}-${p}`);
           const gotEl = document.getElementById(`got-${r}-${p}`);
           const pointsEl = document.getElementById(`points-${r}-${p}`);
-          
           const guess = parseInt(guessEl.value);
           const got = parseInt(gotEl.value);
           let point = 0;
           if (!isNaN(guess) && !isNaN(got)) {
             point = (guess === got) ? 10 + got : -5 * Math.abs(got - guess);
-            sumGuesses += guess;
           }
           pointsEl.textContent = point;
         }
-        // Opdater sum af gæt for runden
-        const sumEl = document.getElementById(`sum-${r}`);
-        if (sumEl) sumEl.textContent = sumGuesses;
       }
 
-      // Beregn total point for hver spiller
       for (let p = 0; p < playerCount; p++) {
         let total = 0;
         for (let r = 0; r < rounds.length; r++) {
@@ -202,10 +217,7 @@
 
     function downloadExcel() {
       const wb = XLSX.utils.book_new();
-      const ws_data = [
-        ["Runde", ...playerNames, "Sum af gæt"]
-      ];
-
+      const ws_data = [["Runde", ...playerNames, "Sum af gæt"]];
       for (let r = 0; r < rounds.length; r++) {
         const row = [`${rounds[r]} kort`];
         for (let p = 0; p < playerCount; p++) {
@@ -214,7 +226,6 @@
         row.push(document.getElementById(`sum-${r}`).textContent);
         ws_data.push(row);
       }
-
       const ws = XLSX.utils.aoa_to_sheet(ws_data);
       XLSX.utils.book_append_sheet(wb, ws, "Pointoversigt");
       XLSX.writeFile(wb, "kalabowhist.xlsx");
@@ -222,15 +233,9 @@
 
     function showGraph() {
       const ctx = document.getElementById('pointChart').getContext('2d');
-
-      // Hvis der allerede findes et Chart, så ødelæg det først
-      if (pointChart) {
-        pointChart.destroy();
-      }
-
+      if (pointChart) pointChart.destroy();
       const datasets = playerNames.map((name, pIndex) => {
-        let data = [];
-        let sum = 0;
+        let data = [], sum = 0;
         for (let r = 0; r < rounds.length; r++) {
           const pt = parseInt(document.getElementById(`points-${r}-${pIndex}`).textContent);
           if (!isNaN(pt)) sum += pt;
@@ -244,7 +249,6 @@
           tension: 0.1
         };
       });
-
       pointChart = new Chart(ctx, {
         type: 'line',
         data: {
