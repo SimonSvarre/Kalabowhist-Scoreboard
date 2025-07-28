@@ -42,6 +42,12 @@
       font-weight: bold;
       background: #eee;
     }
+    thead th {
+      position: sticky;
+      top: 0;
+      background: white;
+      z-index: 2;
+    }
   </style>
 </head>
 <body>
@@ -127,7 +133,7 @@
     function generateRounds(startCards) {
       rounds = [];
       for (let i = startCards; i >= 1; i--) rounds.push(i);
-      for (let i = 0; i < playerCount; i++) rounds.push(1);
+      for (let i = 0; i < playerCount - 1; i++) rounds.push(1);
       for (let i = 2; i <= startCards; i++) rounds.push(i);
     }
 
@@ -214,6 +220,50 @@
         }
         document.getElementById(`total-${playerNames[p]}`).textContent = total;
       }
+    }
+
+    function showGraph() {
+      const labels = rounds.map((_, i) => `Runde ${i + 1}`);
+      const datasets = playerNames.map((name, p) => {
+        const data = [];
+        let sum = 0;
+        for (let r = 0; r < rounds.length; r++) {
+          const pt = parseInt(document.getElementById(`points-${r}-${p}`).textContent);
+          if (!isNaN(pt)) sum += pt;
+          data.push(sum);
+        }
+        return {
+          label: name,
+          data,
+          fill: false,
+          borderColor: `hsl(${(p * 360) / playerCount}, 70%, 50%)`
+        };
+      });
+      if (pointChart) pointChart.destroy();
+      pointChart = new Chart(document.getElementById("pointChart"), {
+        type: "line",
+        data: {
+          labels,
+          datasets
+        }
+      });
+    }
+
+    function downloadExcel() {
+      const wb = XLSX.utils.book_new();
+      const ws_data = [
+        ["Runde", ...playerNames.map(name => `${name} Gæt`), ...playerNames.map(name => `${name} Stik`), ...playerNames.map(name => `${name} Point`)]
+      ];
+      for (let r = 0; r < rounds.length; r++) {
+        const row = [`${rounds[r]} kort`];
+        for (let p = 0; p < playerCount; p++) row.push(document.getElementById(`guess-${r}-${p}`).value);
+        for (let p = 0; p < playerCount; p++) row.push(document.getElementById(`got-${r}-${p}`).value);
+        for (let p = 0; p < playerCount; p++) row.push(document.getElementById(`points-${r}-${p}`).textContent);
+        ws_data.push(row);
+      }
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "Kalabowhist");
+      XLSX.writeFile(wb, "kalabowhist.xlsx");
     }
 
     function saveGameState() {
